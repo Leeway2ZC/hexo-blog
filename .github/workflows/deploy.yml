@@ -3,7 +3,7 @@ name: Deploy Hexo site to GitHub Pages
 on:
   push:
     branches:
-      - main  # 当 main 分支有提交时触发
+      - main  # 监听 main 分支的提交
 
 jobs:
   build:
@@ -27,7 +27,7 @@ jobs:
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
-          github_token: ${{ secrets.PERSONAL_TOKEN }}
+          personal_token: ${{ secrets.PERSONAL_TOKEN }}   # 用你自己添加的 PAT secret
           publish_dir: ./public
           external_repository: Leeway2ZC/Leeway2ZC.github.io
           publish_branch: main
