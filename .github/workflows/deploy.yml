@@ -33,5 +33,6 @@ jobs:
           external_repository: Leeway2ZC/Leeway2ZC.github.io  # 部署仓库
           publish_dir: ./public  # Hexo 生成的静态文件目录
           publish_branch: main  # 部署仓库的分支
+          cname: leeway2zc.top
           user_name: 'Leeway2ZC'  # 提交用户名
           user_email: 'Leeway2ZC@gmail.com'  # 提交邮箱
