@@ -3,7 +3,7 @@ name: Deploy Hexo site to GitHub Pages
 on:
   push:
     branches:
-      - main  # 监听 main 分支的提交
+      - main  # 监听源码仓库的 main 分支
 
 jobs:
   build:
@@ -21,13 +21,17 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build Hexo site
-        run: npx hexo generate
+      - name: Clean and Build Hexo site
+        run: |
+          npx hexo clean
+          npx hexo generate
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
-          personal_token: ${{ secrets.PERSONAL_TOKEN }}   # 用你自己添加的 PAT secret
-          publish_dir: ./public
-          external_repository: Leeway2ZC/Leeway2ZC.github.io
-          publish_branch: main
+          personal_token: ${{ secrets.PERSONAL_TOKEN }}  # 你的 GitHub PAT，确保权限足够
+          external_repository: Leeway2ZC/Leeway2ZC.github.io  # 部署仓库
+          publish_dir: ./public  # Hexo 生成的静态文件目录
+          publish_branch: main  # 部署仓库的分支
+          user_name: 'Leeway2ZC'  # 提交用户名
+          user_email: 'Leeway2ZC@gmail.com'  # 提交邮箱
