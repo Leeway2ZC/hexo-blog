@@ -104,3 +104,11 @@ deploy:
   type: 'git'
   repo: https://github.com/Leeway2ZC/Leeway2ZC.github.io.git
   branch: main
+
+markdown:
+  render:
+    math: true
+
+katex:
+  css: https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/katex.min.css
+  js: https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/katex.min.js
