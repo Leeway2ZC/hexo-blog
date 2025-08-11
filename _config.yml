@@ -3,17 +3,17 @@
 ## Source: https://github.com/hexojs/hexo/
 
 # Site
-title: Hexo
-subtitle: ''
-description: ''
+title: LeeWay
+subtitle: '李海云'
+description: '海上升明月，云深埋故人'
 keywords:
 author: David Lee
-language: en
+language: cn
 timezone: ''
 
 # URL
 ## Set your site url here. For example, if you use GitHub Page, set url as 'https://username.github.io/project'
-url: http://example.com
+url: https://leeway2zc.top/
 permalink: :year/:month/:day/:title/
 permalink_defaults:
 pretty_urls:
