@@ -505,27 +505,353 @@ make console #使用root用户名login，效果如下，此时主机名为qemu
 
    ![image-20250808170413340](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250808170413340.png)
 
-### 9 PS模块
-
-### 10 内存信息
-
-### 11 动态调试
-
-### 12 初始化期间的动态调试
-
 
 
 ## 二 内核 API
 
+实验目标：
+
+- 熟悉基本的Linux内核API
+
+  > 内核是一个独立运行的实体，不能调用用户空间的任何库，所以不能使用printf、malloc、free等常见的用户控件函数
+
+- 描述内存分配机制
+
+- 描述锁定机制
+
+### 1 Linux 内核中的内存分配
+
+- `GFP_KERNEL` ——使用此值可能导致当前进程被挂起。因此，它不能在中断上下文中使用。
+- `GFP_ATOMIC` ——使用此值确保 `kmalloc()` 函数不会挂起当前进程。它可以随时使用。
+
+```c
+static char *mem;
+static int mem_init(void)
+{
+	size_t i;
+	// 第一个参数是字节大小，这里是4096个字节，第二个参数是分配标志
+    // 表示这是普通内核上下文分配，允许睡眠、可以进行内存回收
+	mem = kmalloc(4096 * sizeof(*mem), GFP_KERNEL);
+	if (mem == NULL)
+		goto err_mem;
+	// 打印mem~mem+4096内存地址区间的所有值为字母的元素
+	pr_info("chars: ");
+	for (i = 0; i < 4096; i++) {
+		if (isalpha(mem[i]))
+			printk("%c ", mem[i]);
+	}
+	pr_info("\n");
+	
+	return 0;
+
+err_mem:
+	return -1;
+}
+static void mem_exit(void)
+{
+	kfree(mem);
+}
+```
+
+> 重点在于使用kmalloc分配内存给指针，从而能使用指针指向内存空间进行引用、操作，其实kmalloc的用法和malloc差不多
+
+### 2 在原子上下文中睡眠
+
+```c
+static int sched_spin_init(void)
+{	
+    // 定义一个自旋锁变量
+	spinlock_t lock;
+	// 初始化自旋锁变量
+	spin_lock_init(&lock);
+	// 执行锁定，此时CPU进入中断上下文进行原语操作，即此时代码运行在由自旋锁保护的临界区域当前进程不能挂起或睡眠
+	spin_lock(&lock);
+	// 强制使当前进程进入睡眠，因此执行insmod时会报错
+	set_current_state(TASK_INTERRUPTIBLE);
+	schedule_timeout(5 * HZ);
+	// 释放锁定，使用自旋锁时一定注意，在spin_lock和unlock这两个函数之间不能有挂机或睡眠操作代码
+	spin_unlock(&lock);
+
+	return 0;
+}
+```
+
+> 学习重点在于学会使用自旋锁变量以及使用时的注意要点
+
+### 3 使用内核内存
+
+```c
+struct task_info {
+	pid_t pid;
+	unsigned long timestamp;
+};
+
+static struct task_info *ti1, *ti2, *ti3, *ti4;
+
+static struct task_info *task_info_alloc(int pid)
+{
+	struct task_info *ti;
+
+	/* TODO 1/5: allocated and initialize a task_info struct */
+	// 没有使用sizeof(struct task_info)，可能是为了更好的复用，这里参考1内存分配的操作即可
+    ti = kmalloc(sizeof(*ti), GFP_KERNEL);
+	if (ti == NULL)
+		return NULL;
+	ti->pid = pid;
+    // jiffies 是一个全局可见变量，表示当前的时间
+	ti->timestamp = jiffies;
+
+	return ti;
+}
+
+static int memory_init(void)
+{
+	/* TODO 2/1: call task_info_alloc for current pid */
+    // current是一个可以直接使用的宏，等价于struct task_struct结构体，使用current->pid查找当前进程的PID值
+	ti1 = task_info_alloc(current->pid);
+
+	/* TODO 2/1: call task_info_alloc for parent PID */
+	// 使用current->parent查找当前进程的父进程，这里纯属背板操作，无需了解为什么
+    ti2 = task_info_alloc(current->parent->pid);
+
+	/* TODO 2/1: call task_info alloc for next process PID */
+    // 使用next_task(current)宏找到当前进程的下一个进程
+	ti3 = task_info_alloc(next_task(current)->pid);
+
+	/* TODO 2/1: call task_info_alloc for next process of the next process */
+	ti4 = task_info_alloc(next_task(next_task(current))->pid);
+
+	return 0;
+}
+
+static void memory_exit(void)
+{
+
+	/* TODO 3/4: print ti* field values */
+	printk("pid: %d, timestamp: %lu\n", ti1->pid, ti1->timestamp);
+	printk("pid: %d, timestamp: %lu\n", ti2->pid, ti2->timestamp);
+	printk("pid: %d, timestamp: %lu\n", ti3->pid, ti3->timestamp);
+	printk("pid: %d, timestamp: %lu\n", ti4->pid, ti4->timestamp);
+
+	/* TODO 4/4: free ti* structures */
+    // 释放内存
+	kfree(ti1);
+	kfree(ti2);
+	kfree(ti3);
+	kfree(ti4);
+}
+```
+
+> 重点在于学习如何给分配了内存的变量赋值以及如何使用current宏、next_task宏找到进程PID值
+
+### 4 使用内核列表
+
+```C
+struct task_info {
+	pid_t pid;
+	unsigned long timestamp;
+	struct list_head list;
+};
+
+static struct list_head head;
+
+static struct task_info *task_info_alloc(int pid)
+{
+	struct task_info *ti;
+
+	ti = kmalloc(sizeof(*ti), GFP_KERNEL);
+	if (ti == NULL)
+		return NULL;
+	ti->pid = pid;
+	ti->timestamp = jiffies;
+
+	return ti;
+}
+
+static void task_info_add_to_list(int pid)
+{
+	struct task_info *ti;
+
+	/* TODO 1/2: Allocate task_info and add it to list */
+    // 分配内存给ti变量,ti是一个task_info结构体指针，描述任务信息(这里指描述当前进程的PID和时间)
+	ti = task_info_alloc(pid);
+	// 将ti添加到链表，注意list_add函数的用法，传入的是ti->list的地址和head的地址(没有使用结构体指针)
+    list_add(&ti->list, &head);
+}
+
+static void task_info_add_for_current(void)
+{
+	/* Add current, parent, next and next of next to the list */
+	task_info_add_to_list(current->pid);
+	task_info_add_to_list(current->parent->pid);
+	task_info_add_to_list(next_task(current)->pid);
+	task_info_add_to_list(next_task(next_task(current))->pid);
+}
+
+static void task_info_print_list(const char *msg)
+{
+	struct list_head *p;
+	struct task_info *ti;
+
+	pr_info("%s: [ ", msg);
+	list_for_each(p, &head) {
+		ti = list_entry(p, struct task_info, list);
+		pr_info("(%d, %lu) ", ti->pid, ti->timestamp);
+	}
+	pr_info("]\n");
+}
+
+static void task_info_purge_list(void)
+{
+	struct list_head *p, *q;
+	struct task_info *ti;
+
+	/* TODO 2/5: Iterate over the list and delete all elements */
+    // 这里要注意，list_for_each_safe是一个宏而不是函数，不要加分号
+	list_for_each_safe(p, q, &head) {
+		// list_entry是找到当前链表节点相对应的原来的结构体指针变量，即映射回去
+        ti = list_entry(p, struct task_info, list);
+		list_del(p);
+		kfree(ti);
+	}
+}
+```
+
+  知识点
+
+- `list_entry(ptr, type, member)()` 返回列表中包含元素 `ptr` 的类型为 `type` 的结构，该结构中具有名为 `member` 的成员。
+- `list_for_each(pos, head)` 使用 `pos` 作为游标来迭代列表。
+- `list_for_each_safe(pos, n, head)` 使用 `pos` 作为游标，`n` 作为临时游标来迭代列表。此宏用于从列表中删除项目。
+- `list_del(struct list_head *entry)()` 删除属于列表的 `entry` 地址处的项目。
+- `list_add(struct list_head *new, struct list_head *head)()` 将 `new` 指针所引用的元素添加到 `head` 指针所引用的元素之后。
+- 使用 `static struct list_head head;` 来声明一个链表头，在使用head前进行 `INIT_LIST_HEAD(&head);` 
+- `INIT_LIST_HEAD(struct list_head *list)()` 用于在进行动态分配时，通过设置链表字段 `next` 和 `prev`，来初始化链表的标记。
+
+### 5 使用内核列表进行进程处理
+
+```C
+// kernel_api\5-list-full\list-full.c
+static struct task_info *task_info_find_pid(int pid)
+{
+	struct list_head *p;
+	struct task_info *ti;
+
+	/* TODO 1/5: Look for pid and return task_info or NULL if not found */
+	// 找到成员pid值等于参数pid值的链表节点ti
+    list_for_each(p, &head) {
+		ti = list_entry(p, struct task_info, list);
+		if (ti->pid == pid)
+			return ti;
+	}
+
+	return NULL;
+}
+
+static void list_full_exit(void)
+{
+	struct task_info *ti;
+
+	/* TODO 2/2: Ensure that at least one task is not deleted */
+	// 这里要学会使用原子操作函数atomic_set，原子操作是一种不会被打断必定执行的操作，必须使用原子变量atomic_t
+    ti = list_entry(head.prev, struct task_info, list);
+	atomic_set(&ti->count, 10);
+
+	task_info_remove_expired();
+	task_info_print_list("after removing expired");
+	task_info_purge_list();
+}
+```
+
+> 一些常用的原子操作函数
+
+![](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/Snipaste_2025-08-13_15-12-15.png)
+
+### 6 同步列表工作
+
+> 代码相关答案可以看/templates文件夹下的代码
+
+  使用DEFINE_RWLOCK(lock)定义一个读写自旋锁
+
+```c
+/* TODO 1: you can use either a spinlock or rwlock, define it here */
+DEFINE_RWLOCK(lock);
+```
+
+  读写自旋锁中的代码涉及到的共享资源会被锁定
+
+```c
+write_lock(&lock);
+/* 临界区（critical region） */
+ti = task_info_find_pid(pid);
+if (ti != NULL) {
+    ti->timestamp = jiffies;
+    atomic_inc(&ti->count);
+    /* TODO: Guess why this comment was added  here */
+    /* 临界区（critical region） */
+    write_unlock(&lock);
+    return;
+}
+/* TODO 1: critical section ends here */
+/* 临界区（critical region） */
+write_unlock(&lock);
+
+read_lock(&lock);
+list_for_each(p, &head) {
+    ti = list_entry(p, struct task_info, list);
+    pr_info("(%d, %lu) ", ti->pid, ti->timestamp);
+}
+/* TODO 1: Critical section ends here */
+read_unlock(&lock);
+pr_info("]\n");
+```
+
+  简单来说，就是write_lock和write_unlock之间的代码片段当cpu在执行时会进入临界区，此时如果是write_lock，那就是只有当前的进程能写，其他的进程包括CPU都不能写，如果是read_lock，那就是所有进程都不能写，但是可以一起读
+
+> 如果代码只涉及共享资源的访问就使用read_lock，如果设计对共享资源的修改就使用write_lock，在这个例子中，由于要修改ti的时间戳和计数器，所以使用了write_lock读自旋锁，而只需要打印ti的pid和时间戳，所以使用read_lock
+
+  关于 `EXPORT_SYMBOL(name);` ，其作用是导出模块代码中的函数或者变量给其它模块使用，当模块代码中使用了 `EXPORT_SYMBOL(name);` 那么加载此模块后，其他模块也能使用 name 代表的函数或者变量，但有几点要求
+
+1. 函数或变量不能是静态的，即不能使用 static 关键字
+2. 必须在函数定义或变量赋值后使用
+
+### 7 在我们的列表模块中测试模块调用
+
+  这一节没什么好讲的，就是一个模块依赖关系，如果模块代码使用了其他模块导出的内核符号name，则这个模块依赖于其他模块，被依赖的模块由于模块引用计数refcnt>0无法卸载，所以必须先卸载依赖模块，在这个例子中就是必须先卸载 list-test 模块，然后卸载 list-sync 模块
+
+  除此以外，如果一个模块要使用其他模块导出的内核符号(函数或者变量)，必须先extern声明这个内核符号再使用，例如
+
+```c
+// 要使用 task_info_print_list
+void task_info_print_list(const char *msg) //被依赖模块代码
+{
+	struct list_head *p;
+	struct task_info *ti;
+
+	pr_info("%s: [ ", msg);
+
+	/* TODO 1: Protect list, is this read or write access? */
+	read_lock(&lock);
+	list_for_each(p, &head) {
+		ti = list_entry(p, struct task_info, list);
+		pr_info("(%d, %lu) ", ti->pid, ti->timestamp);
+	}
+	/* TODO 1: Critical section ends here */
+	read_unlock(&lock);
+	pr_info("]\n");
+}
+EXPORT_SYMBOL(task_info_print_list);
+// 必须先 extern task_info_print_list
+extern void task_info_print_list(const char *msg); //依赖模块代码
+```
+
+> 很多东西都是背板式的，如果每个不熟悉的符号都使用LXR或cscope去查询，会消耗大量时间而且不一定能查找正确，学习linux内核编程有如学习一个语法无比复杂的语言，与其先背下来所有单词和认识所有语法后再实践练习使用，不如先开口把最常用最实用的操作记下来，让自己变得熟练，那么以前那些晦涩难懂的知识也就比较容易理解了
 
 
 
+## 三 字符设备驱动程序
 
+ 实验目标
 
-
-
-
-
-
-
-
+- 理解字符设备驱动程序背后的概念
+- 理解可以在字符设备上执行的各种操作
+- 使用等待队列进行工作
