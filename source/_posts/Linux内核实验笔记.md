@@ -855,3 +855,254 @@ extern void task_info_print_list(const char *msg); //依赖模块代码
 - 理解字符设备驱动程序背后的概念
 - 理解可以在字符设备上执行的各种操作
 - 使用等待队列进行工作
+
+### 0 简介
+
+```c
+// struct file -linux - linux-2.6.0\include\linux\fs.h
+// struct file_operations - linux-2.6.0\include\linux\fs.h
+// generic_ro_fops - linux-2.6.0\include\linux\fs.h
+// vfs_read() - linux-2.6.0\fs\read_write.c
+```
+
+### 1 注册/注销
+
+1. 使用 **mknod** 创建 **/dev/so2_cdev** 字符设备节点
+
+```c
+// 在QUMU上使用mknod命令
+mknod /dev/so2_cdev c 42 0
+// 42是主设备号，0是此设备号，均在so2_cdev.c中定义过
+```
+
+> 此时只是创建了一个节点，要使用register_chrdev_region完成注册才能在/proc/devices中看到设备文件
+
+2. 实现设备的注册和注销
+
+```c
+/* TODO 1/6: register char device region for MY_MAJOR and NUM_MINORS starting at MY_MINOR */
+err = register_chrdev_region(MKDEV(MY_MAJOR, MY_MINOR),
+			NUM_MINORS, MODULE_NAME);
+/* TODO 1/1: unregister char device region, for MY_MAJOR and NUM_MINORS starting at MY_MINOR */
+unregister_chrdev_region(MKDEV(MY_MAJOR, MY_MINOR),NUM_MINORS);
+```
+
+> MKDEV的意思是从主设备号MY_MAJOR开始注册次设备号MY_MINOR，注册NUM_MINORS个设备文件，如果当前主设备号下的设备文件数大于NUM_MINORS，则让主设备号＋1继续注册
+
+### 2 注册一个已经注册过的主设备号
+
+```c
+// 使用 cat proc/devices 看已有的设备文件的主设备号，然后替换掉下面的宏定义
+#define MY_MAJOR		42
+```
+
+> 此时会返回错误码 -16，\#define EBUSY  16   /* Device or resource busy */ 表示是当前设备正忙无法被注册
+
+### 3 打开和关闭
+
+> 打开和关闭字符设备文件
+
+1. 初始化设备
+
+```c
+struct so2_device_data {
+	/* TODO 2/1: add cdev member */
+	struct cdev cdev;
+	/* TODO 4/2: add buffer with BUFSIZ elements */
+	char buffer[BUFSIZ];
+	size_t size;
+	/* TODO 7/2: extra members for home */
+	wait_queue_head_t wq;
+	int flag;
+	/* TODO 3/1: add atomic_t access variable to keep track if file is opened */
+	atomic_t access;
+};
+```
+
+> 为当前设备文件建立一个结构体，成员有cdev结构体，该结构体用于在系统中注册字符设备(供cdev_init和cdev_add函数使用)，字符数组buffer用于读操作，size用于指示传输数据的大小，access是一个原子变量，用于计数实现阻塞其它进程干涉，这里只需要关注 TODO 2/1
+
+2. 实现打开和释放函数
+
+```c
+// 在结构体定义static const struct file_operations so2_fops中
+/* TODO 2/2: add open and release functions */
+.open = so2_cdev_open,
+.release = so2_cdev_release,
+
+// 在函数so2_cdev_open中
+/* TODO 3/1: inode->i_cdev contains our cdev struct, use container_of to obtain a pointer to so2_device_data */
+// 获取当前设备文件的结构体
+data = container_of(inode->i_cdev, struct so2_device_data, cdev);
+// 让file指针指向当前设备文件，实现打开
+file->private_data = data;
+```
+
+> container_of 宏用于从一个结构体成员的地址反推出成员所在的结构体的首地址，用法是container_of(ptr, type, member)，在这个例子中container_of 从 inode->i_cdev（一个struct cdev 类型的指针，指向so2_device_data的成员cdev）反推出它所在的 struct so2_device_data 结构体的首地址，从而获得设备的私有数据指针 data
+
+3. 显示消息
+
+```c
+// 使用pr_info函数，与printf类似
+```
+
+4. 再次读取
+
+```c
+// 使用 cat /dev/so2_cdev
+```
+
+### 4 访问限制
+
+> 使用原子变量限制设备访问
+
+1. 在设备结构体中添加 `atomic_t` 变量
+
+```c
+// 在结构体so2_device_data中
+/* TODO 3/1: add atomic_t access variable to keep track if file is opened */
+atomic_t access;
+```
+
+2. 在模块初始化时对该变量进行初始化
+
+```c
+// 在函数so2_cdev_init中
+/* TODO 3/1: set access variable to 0, use atomic_set */
+atomic_set(&devs[i].access, 0);
+// 这里的devs是设备文件的实例化，在设备文件结构体下有定义
+// struct so2_device_data devs[NUM_MINORS];
+```
+
+3. 在打开函数中使用该变量限制对设备的访问。我们建议使用 `atomic_cmpxchg()`
+
+```C
+// 在函数so2_cdev_open中
+/* TODO 3/2: return immediately if access is != 0, use atomic_cmpxchg */
+if (atomic_cmpxchg(&data->access, 0, 1) != 0)
+    return -EBUSY;
+```
+
+> static inline int atomic_cmpxchg(atomic_t *ptr, int old, int new)
+> 这个函数可以在一个原子操作中检查变量的旧值并将其设为新值，在上面的例子中，它表示如果当前的access等于旧值0就将access设为1，不等于0就不修改，无论是否发生替换，atomic_cmpxchg函数都会返回ptr指向的原始值（也就是操作之前的值）。
+
+4. 在释放函数中重置该变量以恢复对设备的访问权限
+
+```C
+// 在函数so2_cdev_release中
+/* TODO 3/1: reset access variable to 0, use atomic_set */
+atomic_set(&data->access, 0);
+```
+
+5. 模拟休眠
+
+```
+// 在函数so2_cdev_open中
+set_current_state(TASK_INTERRUPTIBLE);
+schedule_timeout(1000);
+```
+
+> `set_current_state(TASK_INTERRUPTIBLE);`把当前进程（`current`）的状态设置为可中断睡眠 (`TASK_INTERRUPTIBLE`)。在这个状态下，进程会被调度器认为是“睡着的”，直到有事件唤醒它
+> `schedule_timeout(10 * HZ);`把当前进程从 CPU 调度队列里移走，并设置一个定时器，在 `10 * HZ` 个 **jiffies** 后唤醒它。`HZ` 是内核的时钟频率（例如在 x86 上常见是 100、250 或 1000），`10 * HZ` 表示 10 秒。如果在这段时间内进程收到信号，会提前被唤醒。
+
+### 5 读操作
+
+> 在驱动程序中实现读取函数
+
+1. 在 `so2_device_data` 结构中保持一个缓冲区，并用 `MESSAGE` 宏的值进行初始化。缓冲区的初始化在模块的 `init` 函数中完成
+
+```c
+// struct so2_device_data
+/* TODO 4/2: add buffer with BUFSIZ elements */
+char buffer[BUFSIZ];
+size_t size;
+// static int so2_cdev_init(void)
+/*TODO 4/2: initialize buffer with MESSAGE string */
+memcpy(devs[i].buffer, MESSAGE, sizeof(MESSAGE));
+devs[i].size = sizeof(MESSAGE);
+```
+
+2. 在读取调用时，将内核空间缓冲区的内容复制到用户空间缓冲区
+
+使用 `copy_to_user()` 函数将信息从内核空间复制到用户空间
+
+```c
+// static ssize_t so2_cdev_read(file, user_buffer, size, offset)
+// 首先定义传输的字节数to_read以及获取设备文件指针
+struct so2_device_data *data =
+		(struct so2_device_data *) file->private_data;
+size_t to_read = (size > data->size - *offset) ? (data->size - *offset) : size;
+/* TODO 4/4: Copy data->buffer to user_buffer, use copy_to_user */
+if (copy_to_user(user_buffer, data->buffer + *offset, to_read) != 0)
+    return -EFAULT;
+*offset += to_read;
+
+return to_read;
+```
+
+> 需要将请求的字节数size和内部缓冲区大小data->size - *offset作比较，有可能请求的字节数要超过内部缓存区大小，从而引发错误，其实这里应该是判断 size+\*offset > data->size，可能为了防止越界写成了减去，注意要更新偏移参数，以便于用户达到文件内部缓冲区末尾时退出
+
+> 读取函数so2_cdev_read调用返回的值是从内核空间缓冲区传输到用户空间缓冲区的字节数
+
+### 6 写操作
+
+### 7 ioctl 操作
+
+### 8 带消息的 ioctl
+
+### 9 使用等待队列的 ioctl
+
+### 10 O_NONBLOCK 实现
+
+
+
+## 四 I/O访问和中断
+
+实验目标：
+
+- 与外围设备进行通信
+
+- 实现中断处理程序
+- 将中断与进程上下文同步
+
+关键词：IRQ，I/O 端口，I/O 地址，基地址，UART，request_region，release_region，inb，outb
+
+### 0 简介
+
+```c
+//resource - /inclue/linux/ioport.h
+struct resource {
+	resource_size_t start;
+	resource_size_t end;
+	const char *name;
+	unsigned long flags;
+	unsigned long desc;
+	struct resource *parent, *sibling, *child;
+};
+//request_region - /inclue/linux/ioport.h
+#define request_region(start,n,name)\
+		__request_region(&ioport_resource, (start), (n), (name), 0)
+//__request_region() - /kernel/resource.c
+struct resource *__request_region(struct resource *parent,
+				  resource_size_t start, resource_size_t n,
+				  const char *name, int flags)
+//request_irq() - /include/linux/interrupt.h
+static inline int __must_check
+request_irq(unsigned int irq, irq_handler_t handler, unsigned long flags,
+	    const char *name, void *dev)
+{
+	return request_threaded_irq(irq, handler, NULL, flags, name, dev);
+}
+//request_threaded_irq() - /kernel/irq/manage.c
+int request_threaded_irq(unsigned int irq, irq_handler_t handler,
+			 irq_handler_t thread_fn, unsigned long irqflags,
+			 const char *devname, void *dev_id)
+```
+
+### 实现键盘驱动程序
+
+  目标是创建一个使用键盘IRQ的驱动程序，检查传入的按键代码并将其存储在缓冲区中。通过字符设备驱动程序，用户空间可以访问该缓冲区。
+
+> 如果说上一个实验字符设备驱动程序是关于如何驱动外设如何实现物理设备的读写I/O操作，那么这个实验是关于如何通过中断来操控外设实现自动化
+
+### 1 请求I/
+
