@@ -1104,5 +1104,5 @@ int request_threaded_irq(unsigned int irq, irq_handler_t handler,
 
 > 如果说上一个实验字符设备驱动程序是关于如何驱动外设如何实现物理设备的读写I/O操作，那么这个实验是关于如何通过中断来操控外设实现自动化
 
-### 1 请求I/
+### 1 请求I
 
