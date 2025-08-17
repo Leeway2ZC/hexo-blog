@@ -1167,7 +1167,7 @@ if (err != 0) {
 
 > 使用request_irq注册中断例程后，能在/proc/interrupts中看到自己的中断程序 kbd
 
-![image-20250817211748806](C:\Users\David Lee\AppData\Roaming\Typora\typora-user-images\image-20250817211748806.png)
+![image-20250817211748806](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250817211748806.png)
 
 > 按照“注意”的提示使用 `QEMU_DISPLAY=gtk make boot` 是无法启动成功的，因为QEMU中的Makefile指定需要下载yotco2.4版本的镜像系统，但是链接早就失效了，必须修改QEMU中的Makefile的yotco版本号为4.1才能正常下载系统镜像从而启动，如下图所示修改，如果下载的很慢或者还是下载不了，可能需要使用代理，使用clash-verge的TUN模式可以让虚拟机走代理
 
