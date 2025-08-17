@@ -1102,7 +1102,266 @@ int request_threaded_irq(unsigned int irq, irq_handler_t handler,
 
   目标是创建一个使用键盘IRQ的驱动程序，检查传入的按键代码并将其存储在缓冲区中。通过字符设备驱动程序，用户空间可以访问该缓冲区。
 
-> 如果说上一个实验字符设备驱动程序是关于如何驱动外设如何实现物理设备的读写I/O操作，那么这个实验是关于如何通过中断来操控外设实现自动化
+> 如果说上一个实验字符设备驱动程序是关于如何驱动外设如何实现物理设备的读写I/O操作，那么这个实验是关于如何通过中断来操控外设
 
-### 1 请求I
+### 1 请求I/O端口
+
+```c
+// 在 kbd_init 函数中
+/* TODO 1/8: request the keyboard I/O ports */
+if (request_region(I8042_DATA_REG+1, 1, MODULE_NAME) == NULL) {
+    err = -EBUSY;
+    goto out_unregister;
+}
+if (request_region(I8042_STATUS_REG+1, 1, MODULE_NAME) == NULL) {
+    err = -EBUSY;
+    goto out_release_region;
+}
+out_release_regions:
+	release_region(I8042_STATUS_REG+1, 1);
+out_release_region:
+	release_region(I8042_DATA_REG+1, 1);
+
+out_unregister:
+	unregister_chrdev_region(MKDEV(KBD_MAJOR, KBD_MINOR),
+				 KBD_NR_MINORS);
+out:
+	return err;
+// 在 kbd_exit 函数中
+/* TODO 1/2: release keyboard I/O ports */
+release_region(I8042_STATUS_REG+1, 1);
+release_region(I8042_DATA_REG+1, 1);
+```
+
+> 请求 I/O 端口后，可以在/proc/ioports中找到自己的端口号
+> 如果遇到报错提示-EBUSY，可能是因为没有执行release_region或者unregister_chrdev_region，需要在init函数开头写release_region或者unregister_chrdev_region然后重新插入模块
+
+### 2 中断处理例程
+
+> 所谓中断处理例程，就是中断发生时会执行的代码功能函数，一般是xxx_interrupt_handler()
+
+```c
+// 自己写的一个函数 kbd_interrupt_handle 注意类型是 irqreturn_t
+/* TODO 2/27: implement interrupt handler */
+irqreturn_t kbd_interrupt_handle(int irq_no, void *dev_id)
+{
+	// 当中断发生时输出
+    pr_info("You just pressed A key!\n");
+    
+	/* TODO 3: read the scancode */
+	/* TODO 3/2: interpret the scancode */
+	/* TODO 3/2: display information about the keystrokes */
+	/* TODO 3/7: store ASCII key to buffer */
+	return IRQ_NONE;
+}
+// 在 kbd_init 函数中, 注册中断处理例程，使用 request_irq
+/* TODO 2/7: Register IRQ handler for keyboard IRQ (IRQ 1). */
+err = request_irq(I8042_KBD_IRQ,
+        kbd_interrupt_handle,
+        IRQF_SHARED, MODULE_NAME, &devs[0]);
+if (err != 0) {
+    pr_err("request_irq failed: %d\n", err);
+    goto out_release_regions;
+}
+```
+
+> 使用request_irq注册中断例程后，能在/proc/interrupts中看到自己的中断程序 kbd
+
+![image-20250817211748806](C:\Users\David Lee\AppData\Roaming\Typora\typora-user-images\image-20250817211748806.png)
+
+> 按照“注意”的提示使用 `QEMU_DISPLAY=gtk make boot` 是无法启动成功的，因为QEMU中的Makefile指定需要下载yotco2.4版本的镜像系统，但是链接早就失效了，必须修改QEMU中的Makefile的yotco版本号为4.1才能正常下载系统镜像从而启动，如下图所示修改，如果下载的很慢或者还是下载不了，可能需要使用代理，使用clash-verge的TUN模式可以让虚拟机走代理
+
+<img src="https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250817211057473.png" alt="image-20250817211057473" style="zoom:67%;" />
+
+> 没有报错之后应该能正常启动系统，如下所示
+
+<img src="https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250817211345350.png" alt="image-20250817211345350" style="zoom:67%;" />
+
+> 但此时要退出来，因为没有在Docker内执行 `make copy`，执行前系统内是没有 `skels` 这个文件夹的
+
+在QEMU中按下键盘按键会触发中断例程程序，使用dmesg可以看到：
+
+<img src="https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250817211707033.png" alt="image-20250817211707033" style="zoom: 80%;" />
+
+### 3 将 ASCII 键存储到缓冲区
+
+#### 读取数据存储器
+
+```c
+// 使用函数 inb 读取 I/O 端口的数据，只读一个字符大小的数据(1 Byte)
+static inline u8 i8042_read_data(void)
+{
+	u8 val;
+	/* TODO 3: Read DATA register (8 bits). */
+	val = inb(I8042_DATA_REG);  // 此时读取的是寄存器中的扫描码，还需要转换才能成为ASCII码
+	return val;
+}
+// 在 kbd_interrupt_handle 函数中
+/* TODO 3: read the scancode */
+scancode = i8042_read_data();
+```
+
+#### 解释扫描码
+
+```c
+// 在 kbd_interrupt_handle 函数中
+/* TODO 3/2: interpret the scancode */
+pressed = is_key_press(scancode); // 此函数能判断扫描码是按下键还是释放键
+ch = get_ascii(scancode);  // 此函数能将扫描码转换为ASCII码
+/* TODO 3/2: display information about the keystrokes */
+pr_info("IRQ %d: scancode=0x%x (%u) pressed=%d ch=%c\n",
+    irq_no, scancode, scancode, pressed, ch);
+
+static int get_ascii(unsigned int scancode)
+{
+	static char *row1 = "1234567890";
+	static char *row2 = "qwertyuiop";
+	static char *row3 = "asdfghjkl";
+	static char *row4 = "zxcvbnm";
+
+	scancode &= ~SCANCODE_RELEASED_MASK;
+	if (scancode >= 0x02 && scancode <= 0x0b)
+		return *(row1 + scancode - 0x02);
+	if (scancode >= 0x10 && scancode <= 0x19)
+		return *(row2 + scancode - 0x10);
+	if (scancode >= 0x1e && scancode <= 0x26)
+		return *(row3 + scancode - 0x1e);
+	if (scancode >= 0x2c && scancode <= 0x32)
+		return *(row4 + scancode - 0x2c);
+	if (scancode == 0x39)
+		return ' ';
+	if (scancode == 0x1c)
+		return '\n';
+	return '?';
+}
+
+static int is_key_press(unsigned int scancode)
+{
+	return !(scancode & SCANCODE_RELEASED_MASK);
+}
+```
+
+#### 将字符存储到缓冲区
+
+```c
+// 在 kbd_interrupt_handle 函数中
+/* TODO 3/7: store ASCII key to buffer */
+if (pressed) {
+    struct kbd *data = (struct kbd *)dev_id; // 获取设备结构体
+	// 使用自旋锁，确保共享资源缓冲区是同步访问的，需要先在init函数中初始化
+    spin_lock(&data->lock); 
+    // 读取字符，将 I/O 端口的字符读取到设备缓冲区中，以便于用户空间读取
+    put_char(data, ch);
+    spin_unlock(&data->lock);
+}
+// 在 kbd_init 函数中
+/* TODO 3: initialize spinlock */
+spin_lock_init(&devs[0].lock);
+// put_char 函数定义
+static void put_char(struct kbd *data, char c)
+{
+    // 如果缓冲区中的字符数量大于缓冲区的容量，则丢弃当前读取的字符
+	if (data->count >= BUFFER_SIZE)
+		return;
+	// put->idx指向缓冲区下一个写入位置的索引
+	data->buf[data->put_idx] = c;
+    // 更新索引
+	data->put_idx = (data->put_idx + 1) % BUFFER_SIZE;
+	data->count++;
+}
+```
+
+### 4 读取缓冲区
+
+> 为了访问键盘记录器的数据，我们需要将其发送到用户空间。我们将使用 */dev/kbd* 字符设备来实现这一点。当从该设备读取数据时，我们将从内核空间的缓冲区中获取按键数据
+
+```c
+// 使用 get_char() 从缓冲区中读取一个字符，并使用 put_user() 将其存储到用户缓冲区中
+static bool get_char(char *c, struct kbd *data)
+{
+	/* TODO 4/6: get char from buffer; update count and get_idx */
+	if (data->count > 0) { // 如果缓冲区中的字符数量大于0，则读取字符
+		*c = data->buf[data->get_idx];
+		data->get_idx = (data->get_idx + 1) % BUFFER_SIZE;
+		data->count--;
+		return true;
+	}
+	return false;
+}
+// 在 kbd_read 函数中
+static ssize_t kbd_read(struct file *file,  char __user *user_buffer,
+			size_t size, loff_t *offset)
+{
+	struct kbd *data = (struct kbd *) file->private_data;
+	size_t read = 0;
+	/* TODO 4/18: read data from buffer */
+	unsigned long flags;
+	char ch;
+	bool more = true;
+	while (size--) {
+        // 在读取函数中，使用 spin_lock_irqsave() 和 spin_unlock_irqrestore() 进行加锁
+		spin_lock_irqsave(&data->lock, flags);
+		more = get_char(&ch, data);
+		// 原子上下文中不允许访问用户空间
+        spin_unlock_irqrestore(&data->lock, flags);
+		if (!more)
+			break;
+		// 关键的一句在这，使用put_user函数将字符存储到用户缓存区
+        if (put_user(ch, user_buffer++))  // 参数是ch(字符)和user_buffer(传入的用户缓冲区)
+			return -EFAULT;
+		read++;
+	}
+	return read;
+}
+```
+
+为了测试是否成功实现了从键盘这一物理设备驱动程序的中断中实现数据读取，应该先使用`mknod`创建`/dev/kbd`字符设备驱动程序，正如在`kbd_init`函数中注册字符驱动设备文件的函数 `register_chrdev_region` 中的参数一样，要使用同样的`KBD_MAJOR`和`MODULE_NAME`以及`KBD_MINOR`，也就是 `42`、`kbd`、`0`，使用命令 `mknod /dev/kbd c 42 0` 在QEMU中创建设备驱动文件kbd，构建复制和启动QEMU，加载模块后，能在`/proc/devices`中看到自己的设备文件`42 kbd`，最后
+
+```c
+// 使用 cat /dev/kbd 读取缓冲区中的数据吧，因为 cat 是用户空间使用的命令，因此此时应该显示
+```
+
+<img src="https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250817214906662.png" alt="image-20250817214906662" style="zoom: 80%;" />
+
+### 5 重置缓冲区
+
+> 使用 `echo "clear" > /dev/kbd` 将数据写入设备
+
+```c
+// 实现 reset_buffer
+static void reset_buffer(struct kbd *data)
+{
+	/* TODO 5/3: reset count, put_idx, get_idx */
+	data->count = 0;
+	data->put_idx = 0;
+	data->get_idx = 0;
+}
+// 当写操作发生时，应该执行...
+/* TODO 5/12: add write operation and reset the buffer */
+static ssize_t kbd_write(struct file *file, const char __user *user_buffer,
+			 size_t size, loff_t *offset)
+{
+	struct kbd *data = (struct kbd *) file->private_data;
+	unsigned long flags;
+
+	spin_lock_irqsave(&data->lock, flags);
+	reset_buffer(data);
+	spin_unlock_irqrestore(&data->lock, flags);
+
+	return size;
+}
+// 添加写操作
+static const struct file_operations kbd_fops = {
+	.owner = THIS_MODULE,
+	.open = kbd_open,
+	.release = kbd_release,
+	.read = kbd_read,
+	/* TODO 5: add write operation */
+	.write = kbd_write,
+};
+```
+
+此时执行命令 `echo "clear" > /dev/kbd` 会让缓冲区清空
+
+<img src="https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250817215433645.png" alt="image-20250817215433645" style="zoom:80%;" />
 
