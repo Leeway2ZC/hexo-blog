@@ -238,6 +238,15 @@ sudo bash ./local.sh docker interactive --privileged
 
    > 每次构建模块无需重启虚拟机，停止虚拟机的操作是 ctrl+a，然后按下 q
 
+9. 重新开始课程（删除卷并重建）
+
+   ```
+   docker volume rm SO2_DOCKER_VOLUME
+   sudo bash ./local.sh docker interactive --privileged
+   ```
+
+------
+
 ## 一 内核模块
 
 ### 实验目标
@@ -505,7 +514,7 @@ make console #使用root用户名login，效果如下，此时主机名为qemu
 
    ![image-20250808170413340](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250808170413340.png)
 
-
+------
 
 ## 二 内核 API
 
@@ -846,7 +855,7 @@ extern void task_info_print_list(const char *msg); //依赖模块代码
 
 > 很多东西都是背板式的，如果每个不熟悉的符号都使用LXR或cscope去查询，会消耗大量时间而且不一定能查找正确，学习linux内核编程有如学习一个语法无比复杂的语言，与其先背下来所有单词和认识所有语法后再实践练习使用，不如先开口把最常用最实用的操作记下来，让自己变得熟练，那么以前那些晦涩难懂的知识也就比较容易理解了
 
-
+------
 
 ## 三 字符设备驱动程序
 
@@ -1053,7 +1062,7 @@ return to_read;
 
 ### 10 O_NONBLOCK 实现
 
-
+------
 
 ## 四 I/O访问和中断
 
@@ -1364,4 +1373,264 @@ static const struct file_operations kbd_fops = {
 此时执行命令 `echo "clear" > /dev/kbd` 会让缓冲区清空
 
 <img src="https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250817215433645.png" alt="image-20250817215433645" style="zoom:80%;" />
+
+------
+
+## 五 延迟工作
+
+### 实验目标
+
+- 理解延迟工作（即在稍后时间执行的代码）
+- 实现使用延迟工作的常见任务
+- 理解延迟工作的同步特性
+
+> 关键词：softirq、tasklet、struct tasklet_struct、下半部处理程序、jiffies、HZ、timer、struct timer_list、spin_lock_bh、spin_unlock_bh、workqueue、struct work_struct、内核线程、events/x
+
+```c
+使用 LABS="deferred_work" make skels 构建骨架
+```
+
+### 0 简介
+
+```markdown
+jiffies：全局变量，保存了自系统启动以来经过的"时钟节拍数"，每次时钟中断触发时，内核会把它加1，类型为unsigned long，用于时间比较和定时。
+时间换算：秒数 = jiffies / HZ
+HZ宏：内核每秒时钟中断数
+- x86 每秒中断1000次
+- ARM/嵌入式可能100或250次
+```
+
+```c
+timer_list 是内核定时器机制的核心结构体
+struct timer_list {
+	/* 把定时器挂到全局定时器链表/红黑树上的节点 */
+	struct hlist_node entry;
+	/* 超时时间点（以 jiffies 为单位） */
+	unsigned long expires;
+	/* 回调函数指针 */
+	void (*function)(struct timer_list *);
+	/* 回调函数参数（新内核用 from_timer() 宏来获取） */
+	u32 flags;
+	/* 调试和统计字段略 */
+};
+timer_list负责在延迟时间expires到时把work_struct放进wrokqueue
+```
+
+```c
+spin_lock_bh()会获取一个自旋锁，保证多cpu并发访问的互斥性，并且关闭本地软中断的下半部处理
+```
+
+### 1 定时器
+
+> 创建一个简单的内核模块，在模块的内核加载后的第 *TIMER_TIMEOUT* 秒显示一条消息
+
+1. 创建骨架 `LABS="deferred_work" make skels`
+2. 在timer.c文件中修改
+
+```c
+// 1.初始化一个timer
+static int __init timer_init(void)
+{
+	pr_info("[timer_init] Init module\n");
+	/* TODO 1: initialize timer */
+	timer_setup(&timer, timer_handler, 0);
+	/* TODO 1: schedule timer for the first time */
+	mod_timer(&timer, jiffies + TIMER_TIMEOUT * HZ);
+	return 0;
+}
+// 2.在定时器处理程序中打印信息
+static void timer_handler(struct timer_list *tl)
+{
+	/* TODO 1/4: print a message */
+	static size_t nseconds;
+	nseconds += TIMER_TIMEOUT;
+	pr_info("[timer_handler] nseconds = %d\n", nseconds);
+}
+// 3.注销定时器
+static void __exit timer_exit(void)
+{
+	pr_info("[timer_exit] Exit module\n");
+	/* TODO 1: cleanup; make sure the timer is not running after we exit */
+	del_timer_sync(&timer);
+}
+```
+
+![image-20250903153027875](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250903153027875.png)
+
+### 2 周期性定时器
+
+> 修改前面的模块，使消息每隔 TIMER_TIMEOUT 秒显示一次
+
+```c
+// 在定时器处理程序中，递归调用处理程序
+/* TODO 2: rechedule timer */
+mod_timer(tl, jiffies + TIMER_TIMEOUT * HZ);
+```
+
+![image-20250903153503385](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250903153503385.png)
+
+### 3 使用 ioctl 控制定时器
+
+> 在从用户空间接收到 ioctl 调用后的第 N 秒显示有关当前进程的信息，N作为 ioctl 参数传递
+
+```c
+// 1.在设备文件结构体中添加定时器字段
+/* TODO 1: add timer */
+struct timer_list timer;
+
+// 2.实现定时器处理程序
+/* TODO 1/44: implement timer handler */
+struct my_device_data *my_data = from_timer(my_data, tl, timer);
+pr_info("[timer_handler] pid = %d, comm = %s\n",
+    current->pid, current->comm);
+
+// 3.在中断程序中，实现定时器调度和取消定时器
+case MY_IOCTL_TIMER_SET:
+    /* TODO 1: schedule timer */
+    mod_timer(&my_data->timer, jiffies + arg * HZ);
+    break;
+case MY_IOCTL_TIMER_CANCEL:
+    /* TODO 1: cancel timer */
+    del_timer(&my_data->timer);
+    break;
+
+// 4.初始化一个定时器
+/* TODO 1: Initialize timer. */
+timer_setup(&dev.timer, timer_handler, 0);
+
+// 5.注销定时器
+/* TODO 1: Cleanup: make sure the timer is not running after exiting. */
+del_timer_sync(&dev.timer);
+```
+
+- 使用kernel/下的makenode脚本注册设备字符文件，然后插入模块
+- 在user/下执行 `./test s 3` 在三秒后启用定时器
+
+![image-20250903161654957](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250903161654957.png)
+
+- 执行 `./test c` 停用定时器
+
+![image-20250903161731535](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250903161731535.png)
+
+### 4 阻塞操作
+
+> 在定时器处理程序中执行阻塞操作，由于定时器处理程序运行在中断上下文中，所以当执行阻塞操作时，会发生OOPS错误
+
+```c
+// 1.为了区分定时器处理程序中的功能，在设备结构体中添加flag字段
+/* TODO 2: add flag */
+int flag;
+// 2.在定时器处理程序中，为不同的flag设置不同的功能
+	/* TODO 2/38: check flags: TIMER_TYPE_SET or TIMER_TYPE_ALLOC */
+switch (my_data->flag) {
+	case TIMER_TYPE_SET:
+		break;
+	case TIMER_TYPE_ALLOC:
+#ifdef ALLOC_IO_DIRECT
+		alloc_io();
+#else
+		
+#endif
+		break;
+    default:
+		break;
+}
+// 3.设置不同参数下的中断程序标志
+case MY_IOCTL_TIMER_SET:
+    /* TODO 2: set flag */
+    my_data->flag = TIMER_TYPE_SET;
+case MY_IOCTL_TIMER_ALLOC:
+    /* TODO 2/2: set flag and schedule timer */
+    my_data->flag = TIMER_TYPE_ALLOC;
+    mod_timer(&my_data->timer, jiffies + arg * HZ);
+    break;
+// 4.初始化设备flag标志位
+/* TODO 2: Initialize flag. */
+dev.flag = TIMER_TYPE_NONE;
+```
+
+![image-20250903164345594](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250903164345594.png)
+
+### 5 工作队列
+
+> 使用工作队列调用alloc_io()，即在定时器处理程序中安排一个工作项。工作项处理程序在进程上下文中运行
+
+```C
+// 1.在设备结构体中添加工作项字段
+/* TODO 3: add work */
+struct work_struct work;
+
+// 2.定义工作项处理程序
+/* TODO 3/4: define work handler */
+static void work_handler(struct work_struct *work)
+{
+	alloc_io();
+}
+
+// 3.执行工作项
+/* TODO 3: schedule work */
+schedule_work(&my_data->work);
+
+// 4.初始化工作项
+/* TODO 3: Initialize work. */
+INIT_WORK(&dev.work, work_handler);
+
+// 5.注销工作项
+/* TODO 3: Cleanup: make sure the work handler is not scheduled. */
+flush_scheduled_work();
+```
+
+![image-20250904084842901](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250904084842901.png)
+
+### 6 内核线程
+
+> 创建一个显示当前进程标识符的内核线程
+
+```c
+// 1.初始化等待队列和标志位
+/* TODO/4: init the waitqueues and flags */
+init_waitqueue_head(&wq_stop_thread);
+atomic_set(&flag_stop_thread, 0);
+init_waitqueue_head(&wq_thread_terminated);
+atomic_set(&flag_thread_terminated, 0);
+
+// 2.创建和开始内核线程
+/* TODO: create and start the kernel thread */
+kthread_run(my_thread_f, NULL, "%skthread%d", "my", 0);
+
+// 3.定义线程处理函数
+int my_thread_f(void *data)
+{
+	pr_info("[my_thread_f] Current process id is %d (%s)\n",
+		current->pid, current->comm);
+    
+// 4.等待命令去移除在等待队列中的模块
+/* TODO: Wait for command to remove module on wq_stop_thread queue. */
+wait_event_interruptible(wq_stop_thread,atomic_read(&flag_stop_thread) != 0);
+
+// 5.设置标志位标记内核线程结束
+/* TODO: set flag to mark kernel thread termination */
+atomic_set(&flag_thread_terminated, 1);
+
+// 6.拉起中断，通知其他进程可以上来了
+/* TODO: notify the unload process that we have exited */
+wake_up_interruptible(&wq_thread_terminated);
+
+	pr_info("[my_thread_f] Exiting\n");
+	do_exit(0);
+}
+
+// 7.线程退出函数
+static void __exit kthread_exit(void)
+{
+	/* TODO/2: notify the kernel thread that its time to exit */
+	atomic_set(&flag_stop_thread, 1);
+	wake_up_interruptible(&wq_stop_thread);
+	/* TODO: wait for the kernel thread to exit */
+	wait_event_interruptible(wq_thread_terminated, atomic_read(&flag_thread_terminated) != 0);
+	pr_info("[kthread_exit] Exit module\n");
+}
+```
+
+![image-20250904091929236](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250904091929236.png)
 
