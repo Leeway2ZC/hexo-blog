@@ -1,5 +1,5 @@
 ---
-title: Linux内核实验笔记
+title: Linux内核实验流程笔记
 date: 2025-08-11 17:04:55
 tags: 内核教程
 categories:
@@ -245,7 +245,7 @@ sudo bash ./local.sh docker interactive --privileged
    sudo bash ./local.sh docker interactive --privileged
    ```
 
-------
+
 
 ## 一 内核模块
 
@@ -514,7 +514,7 @@ make console #使用root用户名login，效果如下，此时主机名为qemu
 
    ![image-20250808170413340](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250808170413340.png)
 
-------
+
 
 ## 二 内核 API
 
@@ -855,7 +855,7 @@ extern void task_info_print_list(const char *msg); //依赖模块代码
 
 > 很多东西都是背板式的，如果每个不熟悉的符号都使用LXR或cscope去查询，会消耗大量时间而且不一定能查找正确，学习linux内核编程有如学习一个语法无比复杂的语言，与其先背下来所有单词和认识所有语法后再实践练习使用，不如先开口把最常用最实用的操作记下来，让自己变得熟练，那么以前那些晦涩难懂的知识也就比较容易理解了
 
-------
+
 
 ## 三 字符设备驱动程序
 
@@ -1062,7 +1062,7 @@ return to_read;
 
 ### 10 O_NONBLOCK 实现
 
-------
+
 
 ## 四 I/O访问和中断
 
@@ -1374,7 +1374,7 @@ static const struct file_operations kbd_fops = {
 
 <img src="https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250817215433645.png" alt="image-20250817215433645" style="zoom:80%;" />
 
-------
+
 
 ## 五 延迟工作
 
@@ -1633,4 +1633,216 @@ static void __exit kthread_exit(void)
 ```
 
 ![image-20250904091929236](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250904091929236.png)
+
+
+
+## 6  块设备驱动程序
+
+实验目标：
+
+- 了解 Linux 中 I/O 子系统的行为
+- 在块设备的结构和函数上进行实际操作
+- 通过解决练习，掌握块设备的 API 使用基础技能
+
+### 0  简介
+
+| 符号                             | 定义位置（头文件）    | 简要说明                               |
+| -------------------------------- | --------------------- | -------------------------------------- |
+| `struct bio`                     | `<linux/bio.h>`       | 块 I/O 的基本结构，包含 bio_vec 数组等 |
+| `struct bio_vec`                 | `<linux/bio.h>`       | I/O segment 描述：页面、偏移量、长度   |
+| `bio_for_each_segment`           | `<linux/bio.h>`（宏） | 遍历 bio 中每个 segment 的迭代宏       |
+| `struct gendisk`                 | `<linux/genhd.h>`     | 通用磁盘结构，代表块设备抽象           |
+| `struct block_device_operations` | `<linux/blkdev.h>`    | 块设备操作函数集合                     |
+| `struct request`                 | `<linux/blkdev.h>`    | 块 I/O 请求结构，含多个 bio            |
+
+### 1 块设备
+
+> 创建一个内核模块，允许你注册或者取消注册块设备
+
+```c
+// 1.在初始化函数中注册块设备
+/* TODO 1/5: register block device */
+err = register_blkdev(MY_BLOCK_MAJOR, MY_BLKDEV_NAME);
+if (err < 0) {
+    printk(KERN_ERR "register_blkdev: unable to register\n");
+    return err;
+}
+
+// 2.在卸载函数中注销块设备
+/* TODO 1/1: unregister block device */
+unregister_blkdev(MY_BLOCK_MAJOR, MY_BLKDEV_NAME);
+
+// 3.定义设备号和设备名
+#define MY_BLOCK_MAJOR		240
+#define MY_BLKDEV_NAME		"mybdev"
+```
+
+```markdown
+这里只是注册块设备，还没有创建块设备，只是告诉内核这里有块设备
+```
+
+![image-20250904161600953](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250904161600953.png)
+
+### 2.磁盘注册
+
+> 添加与驱动程序关联的硬盘，填充请求函数以处理请求
+
+```c
+// 1.完善请求处理函数
+static blk_status_t my_block_request(struct blk_mq_hw_ctx *hctx,
+				     const struct blk_mq_queue_data *bd)
+{
+	struct request *rq;
+	struct my_block_dev *dev = hctx->queue->queuedata;
+	/* TODO 2: get pointer to request */
+	rq = bd->rq;
+	/* TODO 2: start request processing. */
+	blk_mq_start_request(rq);
+	/* TODO 2/5: check fs request. Return if passthrough. */
+	if (blk_rq_is_passthrough(rq)) {
+		printk(KERN_NOTICE "Skip non-fs request\n");
+		blk_mq_end_request(rq, BLK_STS_IOERR);
+		goto out;
+	}
+	/* TODO 2/6: print request information */
+	printk(KERN_LOG_LEVEL
+		"request received: pos=%llu bytes=%u "
+		"cur_bytes=%u dir=%c\n",
+		(unsigned long long) blk_rq_pos(rq),
+		blk_rq_bytes(rq), blk_rq_cur_bytes(rq),
+		rq_data_dir(rq) ? 'W' : 'R');
+
+#if USE_BIO_TRANSFER == 1
+/* TODO 6/1: process the request by calling my_xfer_request */
+#else
+/* TODO 3/3:process the request by calling my_block_transfer */
+#endif
+
+	/* TODO 2/1: end request successfully */
+	blk_mq_end_request(rq, BLK_STS_OK);
+
+out:
+	return BLK_STS_OK;
+}
+
+// 2.在初始化函数中创建块设备
+/* TODO 2/3: create block device using create_block_device */
+err = create_block_device(&g_dev);
+if (err < 0)
+    goto out;
+return 0;
+/* TODO 2/1: unregister block device in case of an error */
+unregister_blkdev(MY_BLOCK_MAJOR, MY_BLKDEV_NAME);
+
+// 3.在卸载函数中删除块设备
+/* TODO 2/1: cleanup block device using delete_block_device */
+delete_block_device(&g_dev);
+```
+
+![image-20250904165309029](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250904165309029.png)
+
+### 3.RAM磁盘
+
+> 创建一个 RAM 磁盘：对设备的请求将导致在一个内存区域中进行读写操作
+
+```c
+static void my_block_transfer(struct my_block_dev *dev, sector_t sector,
+		unsigned long len, char *buffer, int dir)
+{
+	unsigned long offset = sector * KERNEL_SECTOR_SIZE;
+
+	/* check for read/write beyond end of block device */
+	if ((offset + len) > dev->size)
+		return;
+
+	/* TODO 3/4: read/write to dev buffer depending on dir */
+	if (dir == 1)		/* write */
+		memcpy(dev->data + offset, buffer, len);
+	else
+		memcpy(buffer, dev->data + offset, len);
+}
+/* TODO 3/3: process the request by calling my_block_transfer */
+my_block_transfer(dev, blk_rq_pos(rq),
+          blk_rq_bytes(rq),
+          bio_data(rq->bio), rq_data_dir(rq));
+```
+
+![image-20250905091140376](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250905091140376.png)
+
+### 4.从磁盘读取数据
+
+> 从内核直接读取 `PHYSICAL_DISK_NAME` 磁盘（`/dev/vdb`）的数据。
+
+```c
+/* TODO 4/3: fill bio (bdev, sector, direction) */
+bio->bi_disk = bdev->bd_disk;
+bio->bi_iter.bi_sector = 0;
+bio->bi_opf = dir;
+/* TODO 4/3: submit bio and wait for completion */
+printk(KERN_LOG_LEVEL "[send_test_bio] Submiting bio\n");
+submit_bio_wait(bio);
+printk(KERN_LOG_LEVEL "[send_test_bio] Done bio\n");
+/* TODO 4/3: read data (first 3 bytes) from bio buffer and print it */
+buf = kmap_atomic(page);
+printk(KERN_LOG_LEVEL "read %02x %02x %02x\n", buf[0], buf[1], buf[2]);
+kunmap_atomic(buf);
+/* TODO 4/5: get block device in exclusive mode */
+bdev = blkdev_get_by_path(name, FMODE_READ | FMODE_WRITE | FMODE_EXCL, THIS_MODULE);
+if (IS_ERR(bdev)) {
+    printk(KERN_ERR "blkdev_get_by_path\n");
+    return NULL;
+}
+/* TODO 4/1: put block device */
+blkdev_put(bdev, FMODE_READ | FMODE_WRITE | FMODE_EXCL);
+```
+
+![image-20250905092023588](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250905092023588.png)
+
+### 5.将数据写入磁盘
+
+> 在磁盘上写入消息（`BIO_WRITE_MESSAGE`）
+
+```c
+/* TODO 5/5: write message to bio buffer if direction is write */
+if (dir == REQ_OP_WRITE) {
+    buf = kmap_atomic(page);
+    memcpy(buf, BIO_WRITE_MESSAGE, strlen(BIO_WRITE_MESSAGE));
+    kunmap_atomic(buf);
+}
+static void __exit relay_exit(void)
+{
+	/* TODO 5/1: send test write bio */
+	send_test_bio(phys_bdev, REQ_OP_WRITE);
+	close_disk(phys_bdev);
+}
+```
+
+![image-20250905093238273](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250905093238273.png)
+
+### 6.在struct bio级别处理请求队列中的请求
+
+> 处理来自请求队列中所有 `struct bio` 结构的所有 `struct bio_vec` 结构（也称为段）
+
+```c
+/* TODO 6/0: use bios for read/write requests */
+#define USE_BIO_TRANSFER	1
+/* TODO 6/10: iterate segments */
+struct bio_vec bvec;
+struct req_iterator iter;
+rq_for_each_segment(bvec, req, iter) {
+    sector_t sector = iter.iter.bi_sector;
+    unsigned long offset = bvec.bv_offset;
+    size_t len = bvec.bv_len;
+    int dir = bio_data_dir(iter.bio);
+    char *buffer = kmap_atomic(bvec.bv_page);
+    printk(KERN_LOG_LEVEL "%s: buf %8p offset %lu len %u dir %d\n", __func__, buffer, offset, len, dir);
+    /* TODO 6/3: copy bio data to device buffer */
+    my_block_transfer(dev, sector, len, buffer + offset, dir);
+    kunmap_atomic(buffer);
+}
+/* TODO 6/1: process the request by calling my_xfer_request */
+my_xfer_request(dev, rq);
+```
+
+![image-20250905100157263](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250905100157263.png)
 
