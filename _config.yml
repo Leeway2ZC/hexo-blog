@@ -5,7 +5,7 @@
 # Site
 title: LeeWay
 subtitle: '李海云'
-description: '海上升明月，云深埋故人'
+description: '海上升明月，坐看云起时'
 keywords:
 author: David Lee
 language: cn
@@ -108,6 +108,9 @@ deploy:
 markdown:
   render:
     math: true
+
+encrypt:
+  enable: true
 
 katex:
   css: https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/katex.min.css
