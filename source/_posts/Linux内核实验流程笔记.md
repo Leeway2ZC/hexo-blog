@@ -247,16 +247,16 @@ sudo bash ./local.sh docker interactive --privileged
 
 
 
-## 一 内核模块
+## 一  内核模块
 
-### 实验目标
+实验目标
 
 - 创建简单的模块
 - 描述内核模块编译的过程
 - 展示如何在内核中使用模块
 - 简单的内核调试方法
 
-### 1 内核模块的使用|加载|卸载
+### 1.内核模块的使用|加载|卸载
 
 > 使用 make console 启动虚拟机，并完成以下任务 (正确启动虚拟机以及上位机应该是下面这个界面)
 
@@ -305,7 +305,7 @@ make console #使用root用户名login，效果如下，此时主机名为qemu
 
   ![image-20250806092748489](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250806092748489.png)
 
-### 2 Printk
+### 2.Printk
 
 > 配置系统，使消息不直接显示在串行控制台上，只能使用 `dmesg` 命令来查看
 
@@ -317,7 +317,7 @@ make console #使用root用户名login，效果如下，此时主机名为qemu
 
   ![image-20250806094004426](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250806094004426.png)
 
-### 3 错误
+### 3.错误
 
 > 生成名为 **3-error-mod** 的任务的框架。编译源代码并得到相应的内核模块。
 >
@@ -331,7 +331,7 @@ make console #使用root用户名login，效果如下，此时主机名为qemu
 
   ![image-20250806104917752](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250806104917752.png)
 
-### 4 子模块
+### 4.子模块
 
 > 查看 `4-multi-mod/` 目录中的 C 源代码文件 `mod1.c` 和 `mod2.c`。模块 2 仅包含模块 1 使用的函数的定义。
 >
@@ -355,7 +355,7 @@ make console #使用root用户名login，效果如下，此时主机名为qemu
 
    <img src="https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250806161240091.png" alt="image-20250806161240091" style="zoom:67%;" />
 
-### 5 内核 oops
+### 5.内核 oops
 
 > 学习当内核模块代码有问题导致模块插入后内核发生了错误应该怎么处理
 
@@ -406,7 +406,7 @@ make console #使用root用户名login，效果如下，此时主机名为qemu
 
    <img src="https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250807083857615.png" alt="image-20250807083857615" style="zoom:67%;" />
 
-### 6 模块参数
+### 6.模块参数
 
 > 在不修改源代码 `cmd_mod.c` 的情况下，加载内核模块以显示消息 `Early bird gets tired`
 
@@ -449,7 +449,7 @@ make console #使用root用户名login，效果如下，此时主机名为qemu
      static const char *str = "hello";  // ❌ 无法作为 module_param
      ```
 
-### 7 进程信息
+### 7.进程信息
 
 > 检查名为 **7-list-proc** 的任务的框架。添加代码来显示当前进程的进程 ID（ `PID` ）和可执行文件名
 
@@ -478,7 +478,7 @@ make console #使用root用户名login，效果如下，此时主机名为qemu
 
 4. 这里得查很多资料才能知道这些代码是什么意思
 
-### 8 KDB
+### 8.KDB
 
 > 使用KDB(Kernel Debugger)分析堆栈找出错误代码位置|使用KDB找到模块加载的地址|在一个新窗口中使用 GDB 并根据 KDB 提供的信息查看代码(没解决)
 
@@ -516,7 +516,7 @@ make console #使用root用户名login，效果如下，此时主机名为qemu
 
 
 
-## 二 内核 API
+## 二  内核 API
 
 实验目标：
 
@@ -528,7 +528,7 @@ make console #使用root用户名login，效果如下，此时主机名为qemu
 
 - 描述锁定机制
 
-### 1 Linux 内核中的内存分配
+### 1.Linux 内核中的内存分配
 
 - `GFP_KERNEL` ——使用此值可能导致当前进程被挂起。因此，它不能在中断上下文中使用。
 - `GFP_ATOMIC` ——使用此值确保 `kmalloc()` 函数不会挂起当前进程。它可以随时使用。
@@ -564,7 +564,7 @@ static void mem_exit(void)
 
 > 重点在于使用kmalloc分配内存给指针，从而能使用指针指向内存空间进行引用、操作，其实kmalloc的用法和malloc差不多
 
-### 2 在原子上下文中睡眠
+### 2.在原子上下文中睡眠
 
 ```c
 static int sched_spin_init(void)
@@ -587,7 +587,7 @@ static int sched_spin_init(void)
 
 > 学习重点在于学会使用自旋锁变量以及使用时的注意要点
 
-### 3 使用内核内存
+### 3.使用内核内存
 
 ```c
 struct task_info {
@@ -653,7 +653,7 @@ static void memory_exit(void)
 
 > 重点在于学习如何给分配了内存的变量赋值以及如何使用current宏、next_task宏找到进程PID值
 
-### 4 使用内核列表
+### 4.使用内核列表
 
 ```C
 struct task_info {
@@ -736,7 +736,7 @@ static void task_info_purge_list(void)
 - 使用 `static struct list_head head;` 来声明一个链表头，在使用head前进行 `INIT_LIST_HEAD(&head);` 
 - `INIT_LIST_HEAD(struct list_head *list)()` 用于在进行动态分配时，通过设置链表字段 `next` 和 `prev`，来初始化链表的标记。
 
-### 5 使用内核列表进行进程处理
+### 5.使用内核列表进行进程处理
 
 ```C
 // kernel_api\5-list-full\list-full.c
@@ -775,7 +775,7 @@ static void list_full_exit(void)
 
 ![](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/Snipaste_2025-08-13_15-12-15.png)
 
-### 6 同步列表工作
+### 6.同步列表工作
 
 > 代码相关答案可以看/templates文件夹下的代码
 
@@ -823,7 +823,7 @@ pr_info("]\n");
 1. 函数或变量不能是静态的，即不能使用 static 关键字
 2. 必须在函数定义或变量赋值后使用
 
-### 7 在我们的列表模块中测试模块调用
+### 7.在我们的列表模块中测试模块调用
 
   这一节没什么好讲的，就是一个模块依赖关系，如果模块代码使用了其他模块导出的内核符号name，则这个模块依赖于其他模块，被依赖的模块由于模块引用计数refcnt>0无法卸载，所以必须先卸载依赖模块，在这个例子中就是必须先卸载 list-test 模块，然后卸载 list-sync 模块
 
@@ -857,7 +857,7 @@ extern void task_info_print_list(const char *msg); //依赖模块代码
 
 
 
-## 三 字符设备驱动程序
+## 三  字符设备驱动程序
 
  实验目标
 
@@ -865,7 +865,7 @@ extern void task_info_print_list(const char *msg); //依赖模块代码
 - 理解可以在字符设备上执行的各种操作
 - 使用等待队列进行工作
 
-### 0 简介
+### 0.简介
 
 ```c
 // struct file -linux - linux-2.6.0\include\linux\fs.h
@@ -874,7 +874,7 @@ extern void task_info_print_list(const char *msg); //依赖模块代码
 // vfs_read() - linux-2.6.0\fs\read_write.c
 ```
 
-### 1 注册/注销
+### 1.注册/注销
 
 1. 使用 **mknod** 创建 **/dev/so2_cdev** 字符设备节点
 
@@ -898,7 +898,7 @@ unregister_chrdev_region(MKDEV(MY_MAJOR, MY_MINOR),NUM_MINORS);
 
 > MKDEV的意思是从主设备号MY_MAJOR开始注册次设备号MY_MINOR，注册NUM_MINORS个设备文件，如果当前主设备号下的设备文件数大于NUM_MINORS，则让主设备号＋1继续注册
 
-### 2 注册一个已经注册过的主设备号
+### 2.注册一个已经注册过的主设备号
 
 ```c
 // 使用 cat proc/devices 看已有的设备文件的主设备号，然后替换掉下面的宏定义
@@ -907,7 +907,7 @@ unregister_chrdev_region(MKDEV(MY_MAJOR, MY_MINOR),NUM_MINORS);
 
 > 此时会返回错误码 -16，\#define EBUSY  16   /* Device or resource busy */ 表示是当前设备正忙无法被注册
 
-### 3 打开和关闭
+### 3.打开和关闭
 
 > 打开和关闭字符设备文件
 
@@ -960,7 +960,7 @@ file->private_data = data;
 // 使用 cat /dev/so2_cdev
 ```
 
-### 4 访问限制
+### 4.访问限制
 
 > 使用原子变量限制设备访问
 
@@ -1013,7 +1013,7 @@ schedule_timeout(1000);
 > `set_current_state(TASK_INTERRUPTIBLE);`把当前进程（`current`）的状态设置为可中断睡眠 (`TASK_INTERRUPTIBLE`)。在这个状态下，进程会被调度器认为是“睡着的”，直到有事件唤醒它
 > `schedule_timeout(10 * HZ);`把当前进程从 CPU 调度队列里移走，并设置一个定时器，在 `10 * HZ` 个 **jiffies** 后唤醒它。`HZ` 是内核的时钟频率（例如在 x86 上常见是 100、250 或 1000），`10 * HZ` 表示 10 秒。如果在这段时间内进程收到信号，会提前被唤醒。
 
-### 5 读操作
+### 5.读操作
 
 > 在驱动程序中实现读取函数
 
@@ -1052,19 +1052,19 @@ return to_read;
 
 > 读取函数so2_cdev_read调用返回的值是从内核空间缓冲区传输到用户空间缓冲区的字节数
 
-### 6 写操作
+### 6.写操作
 
-### 7 ioctl 操作
+### 7.ioctl 操作
 
-### 8 带消息的 ioctl
+### 8.带消息的 ioctl
 
-### 9 使用等待队列的 ioctl
+### 9.使用等待队列的 ioctl
 
-### 10 O_NONBLOCK 实现
+### 10.O_NONBLOCK 实现
 
 
 
-## 四 I/O访问和中断
+## 四  I/O访问和中断
 
 实验目标：
 
@@ -1075,7 +1075,7 @@ return to_read;
 
 关键词：IRQ，I/O 端口，I/O 地址，基地址，UART，request_region，release_region，inb，outb
 
-### 0 简介
+### 0.简介
 
 ```c
 //resource - /inclue/linux/ioport.h
@@ -1113,7 +1113,7 @@ int request_threaded_irq(unsigned int irq, irq_handler_t handler,
 
 > 如果说上一个实验字符设备驱动程序是关于如何驱动外设如何实现物理设备的读写I/O操作，那么这个实验是关于如何通过中断来操控外设
 
-### 1 请求I/O端口
+### 1.请求I/O端口
 
 ```c
 // 在 kbd_init 函数中
@@ -1145,7 +1145,7 @@ release_region(I8042_DATA_REG+1, 1);
 > 请求 I/O 端口后，可以在/proc/ioports中找到自己的端口号
 > 如果遇到报错提示-EBUSY，可能是因为没有执行release_region或者unregister_chrdev_region，需要在init函数开头写release_region或者unregister_chrdev_region然后重新插入模块
 
-### 2 中断处理例程
+### 2.中断处理例程
 
 > 所谓中断处理例程，就是中断发生时会执行的代码功能函数，一般是xxx_interrupt_handler()
 
@@ -1192,7 +1192,7 @@ if (err != 0) {
 
 <img src="https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250817211707033.png" alt="image-20250817211707033" style="zoom: 80%;" />
 
-### 3 将 ASCII 键存储到缓冲区
+### 3.将 ASCII 键存储到缓冲区
 
 #### 读取数据存储器
 
@@ -1280,7 +1280,7 @@ static void put_char(struct kbd *data, char c)
 }
 ```
 
-### 4 读取缓冲区
+### 4.读取缓冲区
 
 > 为了访问键盘记录器的数据，我们需要将其发送到用户空间。我们将使用 */dev/kbd* 字符设备来实现这一点。当从该设备读取数据时，我们将从内核空间的缓冲区中获取按键数据
 
@@ -1332,7 +1332,7 @@ static ssize_t kbd_read(struct file *file,  char __user *user_buffer,
 
 <img src="https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250817214906662.png" alt="image-20250817214906662" style="zoom: 80%;" />
 
-### 5 重置缓冲区
+### 5.重置缓冲区
 
 > 使用 `echo "clear" > /dev/kbd` 将数据写入设备
 
@@ -1376,9 +1376,9 @@ static const struct file_operations kbd_fops = {
 
 
 
-## 五 延迟工作
+## 五  延迟工作
 
-### 实验目标
+实验目标
 
 - 理解延迟工作（即在稍后时间执行的代码）
 - 实现使用延迟工作的常见任务
@@ -1390,7 +1390,7 @@ static const struct file_operations kbd_fops = {
 使用 LABS="deferred_work" make skels 构建骨架
 ```
 
-### 0 简介
+### 0.简介
 
 ```markdown
 jiffies：全局变量，保存了自系统启动以来经过的"时钟节拍数"，每次时钟中断触发时，内核会把它加1，类型为unsigned long，用于时间比较和定时。
@@ -1420,7 +1420,7 @@ timer_list负责在延迟时间expires到时把work_struct放进wrokqueue
 spin_lock_bh()会获取一个自旋锁，保证多cpu并发访问的互斥性，并且关闭本地软中断的下半部处理
 ```
 
-### 1 定时器
+### 1.定时器
 
 > 创建一个简单的内核模块，在模块的内核加载后的第 *TIMER_TIMEOUT* 秒显示一条消息
 
@@ -1457,7 +1457,7 @@ static void __exit timer_exit(void)
 
 ![image-20250903153027875](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250903153027875.png)
 
-### 2 周期性定时器
+### 2.周期性定时器
 
 > 修改前面的模块，使消息每隔 TIMER_TIMEOUT 秒显示一次
 
@@ -1469,7 +1469,7 @@ mod_timer(tl, jiffies + TIMER_TIMEOUT * HZ);
 
 ![image-20250903153503385](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250903153503385.png)
 
-### 3 使用 ioctl 控制定时器
+### 3.使用 ioctl 控制定时器
 
 > 在从用户空间接收到 ioctl 调用后的第 N 秒显示有关当前进程的信息，N作为 ioctl 参数传递
 
@@ -1512,7 +1512,7 @@ del_timer_sync(&dev.timer);
 
 ![image-20250903161731535](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250903161731535.png)
 
-### 4 阻塞操作
+### 4.阻塞操作
 
 > 在定时器处理程序中执行阻塞操作，由于定时器处理程序运行在中断上下文中，所以当执行阻塞操作时，会发生OOPS错误
 
@@ -1551,7 +1551,7 @@ dev.flag = TIMER_TYPE_NONE;
 
 ![image-20250903164345594](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250903164345594.png)
 
-### 5 工作队列
+### 5.工作队列
 
 > 使用工作队列调用alloc_io()，即在定时器处理程序中安排一个工作项。工作项处理程序在进程上下文中运行
 
@@ -1582,7 +1582,7 @@ flush_scheduled_work();
 
 ![image-20250904084842901](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250904084842901.png)
 
-### 6 内核线程
+### 6.内核线程
 
 > 创建一个显示当前进程标识符的内核线程
 
@@ -1636,7 +1636,7 @@ static void __exit kthread_exit(void)
 
 
 
-## 6  块设备驱动程序
+## 六  块设备驱动程序
 
 实验目标：
 
@@ -1644,7 +1644,7 @@ static void __exit kthread_exit(void)
 - 在块设备的结构和函数上进行实际操作
 - 通过解决练习，掌握块设备的 API 使用基础技能
 
-### 0  简介
+### 0.简介
 
 | 符号                             | 定义位置（头文件）    | 简要说明                               |
 | -------------------------------- | --------------------- | -------------------------------------- |
@@ -1655,7 +1655,7 @@ static void __exit kthread_exit(void)
 | `struct block_device_operations` | `<linux/blkdev.h>`    | 块设备操作函数集合                     |
 | `struct request`                 | `<linux/blkdev.h>`    | 块 I/O 请求结构，含多个 bio            |
 
-### 1 块设备
+### 1.块设备
 
 > 创建一个内核模块，允许你注册或者取消注册块设备
 
@@ -1845,4 +1845,340 @@ my_xfer_request(dev, rq);
 ```
 
 ![image-20250905100157263](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250905100157263.png)
+
+## 七  文件系统驱动程序(第一部分)
+
+实验目标：
+
+- 了解 Linux 中虚拟文件系统（VFS）的知识，理解有关“inode”、“dentry”、“文件”、“超级块”和数据块的概念。
+- 理解在 VFS 内挂载文件系统的过程。
+- 了解各种文件系统类型，并理解具有物理支持（在磁盘上）和没有物理支持的文件系统之间的区别。
+
+### 1.注册和注销myfs文件系统
+
+```c
+static struct dentry *myfs_mount(struct file_system_type *fs_type,
+		int flags, const char *dev_name, void *data)
+{
+	/* TODO 1/1: call superblock mount function */
+	return mount_nodev(fs_type, flags, data, myfs_fill_super);
+}
+/* TODO 1/6: define file_system_type structure */
+static struct file_system_type myfs_fs_type = {
+	.owner		= THIS_MODULE,
+	.name		= "myfs",
+	.mount		= myfs_mount,
+	.kill_sb	= kill_litter_super,
+};
+/* TODO 1/1: register */
+err = register_filesystem(&myfs_fs_type);
+/* TODO 1/1: unregister */
+unregister_filesystem(&myfs_fs_type);
+```
+
+![image-20250908093600392](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250908093600392.png)
+
+### 2.完成myfs超级块填充
+
+> 为了能够挂载文件系统，我们需要填充其超级块的字段，即类型为 `struct super_block` 的通用 VFS 结构，从而完成文件系统超级块的初始化
+
+```c
+/* TODO 2/4: define super_operations structure */
+static const struct super_operations myfs_ops = {
+	.statfs		= simple_statfs,
+	.drop_inode	= generic_drop_inode,
+};
+/* TODO 2/5: fill super_block
+ *   - blocksize, blocksize_bits
+ *   - magic
+ *   - super operations
+ *   - maxbytes
+ */
+sb->s_maxbytes = MAX_LFS_FILESIZE;
+sb->s_blocksize = MYFS_BLOCKSIZE;
+sb->s_blocksize_bits = MYFS_BLOCKSIZE_BITS;
+sb->s_magic = MYFS_MAGIC;
+sb->s_op = &myfs_ops;
+```
+
+### 3.初始化myfs根索引节点
+
+> 为了成功完成挂载操作，还需要初始化根索引节点，根索引节点是文件系统根目录（即 `/`）的索引节点。
+
+```c
+/* TODO 3/3: fill inode structure
+ *     - mode
+ *     - uid
+ *     - gid
+ *     - atime,ctime,mtime
+ *     - ino
+ */
+inode_init_owner(inode, dir, mode);
+inode->i_atime = inode->i_mtime = inode->i_ctime = current_time(inode);
+inode->i_ino = 1;
+/* TODO 3/2: set inode operations for dir inodes. */
+inode->i_op = &simple_dir_inode_operations;
+inode->i_fop = &simple_dir_operations;
+/* TODO 3/1: directory inodes start off with i_nlink == 2 (for "." entry).
+ * Directory link count should be incremented (use inc_nlink).
+ */
+inc_nlink(inode);
+```
+
+### 4.测试myfs的挂载和卸载
+
+> 执行脚本 `./test-myfs.sh` 测试整个功能
+
+![image-20250908095833026](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250908095833026.png)
+
+### 5.minfs
+
+> 接下来实现一个支持磁盘的文件系统
+
+#### 1.注册和注销minfs文件系统
+
+```c
+static struct dentry *minfs_mount(struct file_system_type *fs_type,
+		int flags, const char *dev_name, void *data)
+{
+	/* TODO 1/1: call superblock mount function */
+	return mount_bdev(fs_type, flags, dev_name, data, minfs_fill_super);
+}
+static struct file_system_type minfs_fs_type = {
+	.owner		= THIS_MODULE,
+	.name		= "minfs",
+	/* TODO 1/3: add mount, kill_sb and fs_flags */
+	.mount		= minfs_mount,
+	.kill_sb	= kill_block_super,
+	.fs_flags	= FS_REQUIRES_DEV,
+};
+```
+
+![image-20250908144034036](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250908144034036.png)
+
+#### 2.完善minfs超级块
+
+> 为了能够挂载文件系统，你需要在 `minfs_fill_super` 函数中填充超级块（即类型为 `struct super_block` 的结构体）
+
+```c
+struct inode *myfs_get_inode(struct super_block *sb, const struct inode *dir,
+		int mode)
+{
+	struct inode *inode = new_inode(sb);
+
+	if (!inode)
+		return NULL;
+
+	/* TODO 3/3: fill inode structure
+	 *     - mode
+	 *     - uid
+	 *     - gid
+	 *     - atime,ctime,mtime
+	 *     - ino
+	 */
+	inode_init_owner(inode, dir, mode);
+	inode->i_atime = inode->i_mtime = inode->i_ctime = current_time(inode);
+	inode->i_ino = 1;
+
+	/* TODO 5/1: Init i_ino using get_next_ino */
+	inode->i_ino = get_next_ino();
+
+	/* TODO 6/1: Initialize address space operations. */
+	inode->i_mapping->a_ops = &minfs_aops;
+
+	if (S_ISDIR(mode)) {
+		/* TODO 3/2: set inode operations for dir inodes. */
+		inode->i_op = &simple_dir_inode_operations;
+		inode->i_fop = &simple_dir_operations;
+
+		/* TODO 5/1: use myfs_dir_inode_operations for inode
+		 * operations (i_op).
+		 */
+		inode->i_op = &minfs_dir_inode_operations;
+
+		/* TODO 3/1: directory inodes start off with i_nlink == 2 (for "." entry).
+		 * Directory link count should be incremented (use inc_nlink).
+		 */
+		inc_nlink(inode);
+	}
+
+	/* TODO 6/4: Set file inode and file operations for regular files
+	 * (use the S_ISREG macro).
+	 */
+	if (S_ISREG(mode)) {
+		inode->i_op = &minfs_file_inode_operations;
+		inode->i_fop = &minfs_file_operations;
+	}
+
+	return inode;
+}
+static int minfs_fill_super(struct super_block *s, void *data, int silent)
+{
+	struct minfs_sb_info *sbi;
+	struct minfs_super_block *ms;
+	struct inode *root_inode;
+	struct dentry *root_dentry;
+	struct buffer_head *bh;
+	int ret = -EINVAL;
+
+	sbi = kzalloc(sizeof(struct minfs_sb_info), GFP_KERNEL);
+	if (!sbi)
+		return -ENOMEM;
+	s->s_fs_info = sbi;
+
+	/* Set block size for superblock. */
+	if (!sb_set_blocksize(s, MINFS_BLOCK_SIZE))
+		goto out_bad_blocksize;
+
+	/* TODO 2/3: Read block with superblock. It's the first block on
+	 * the device, i.e. the block with the index 0. This is the index
+	 * to be passed to sb_bread().
+	 */
+	bh = sb_bread(s, MINFS_SUPER_BLOCK);
+	if (bh == NULL)
+		goto out_bad_sb;
+
+	/* TODO 2/1: interpret read data as minfs_super_block */
+	ms = (struct minfs_super_block *) bh->b_data;
+
+	/* TODO 2/2: check magic number with value defined in minfs.h. jump to out_bad_magic if not suitable */
+	if (ms->magic != MINFS_MAGIC)
+		goto out_bad_magic;
+
+	/* TODO 2/2: fill super_block with magic_number, super_operations */
+	s->s_magic = MINFS_MAGIC;
+	s->s_op = &minfs_ops;
+
+	/* TODO 2/2: Fill sbi with rest of information from disk superblock
+	 * (i.e. version).
+	 */
+	sbi->version = ms->version;
+	sbi->imap = ms->imap;
+
+	/* allocate root inode and root dentry */
+	/* TODO 2/0: use myfs_get_inode instead of minfs_iget */
+	root_inode = myfs_get_inode(s, MINFS_ROOT_INODE, S_IFDIR | S_IRWXU | S_IRGRP |
+			S_IXGRP | S_IROTH | S_IXOTH);
+	if (!root_inode)
+		goto out_bad_inode;
+
+	root_dentry = d_make_root(root_inode);
+	if (!root_dentry)
+		goto out_iput;
+	s->s_root = root_dentry;
+
+	/* Store superblock buffer_head for further use. */
+	sbi->sbh = bh;
+
+	return 0;
+
+out_iput:
+	iput(root_inode);
+out_bad_inode:
+	printk(LOG_LEVEL "bad inode\n");
+out_bad_magic:
+	printk(LOG_LEVEL "bad magic number\n");
+	brelse(bh);
+out_bad_sb:
+	printk(LOG_LEVEL "error reading buffer_head\n");
+out_bad_blocksize:
+	printk(LOG_LEVEL "bad block size\n");
+	s->s_fs_info = NULL;
+	kfree(sbi);
+	return ret;
+}
+```
+
+![image-20250908153002651](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250908153002651.png)
+
+> 挂载成功
+
+#### 3.创建和销毁minfs索引节点
+
+```c
+static struct inode *minfs_alloc_inode(struct super_block *s)
+{
+	struct minfs_inode_info *mii;
+
+	/* TODO 3/4: Allocate minfs_inode_info. */
+	mii = kzalloc(sizeof(struct minfs_inode_info), GFP_KERNEL);
+	if (mii == NULL)
+		return NULL;
+
+	/* TODO 3/1: init VFS inode in minfs_inode_info */
+	inode_init_once(&mii->vfs_inode);
+
+	return &mii->vfs_inode;
+}
+static void minfs_destroy_inode(struct inode *inode)
+{
+	/* TODO 3/1: free minfs_inode_info */
+	kfree(container_of(inode, struct minfs_inode_info, vfs_inode));
+}
+```
+
+#### 4.初始化minfs根索引节点
+
+```c
+/* TODO 4/2: Read block with inodes. It's the second block on
+ * the device, i.e. the block with the index 1. This is the index
+ * to be passed to sb_bread().
+ */
+if (!(bh = sb_bread(s, MINFS_INODE_BLOCK)))
+    goto out_bad_sb;
+/* TODO 4/1: Get inode with index ino from the block. */
+mi = ((struct minfs_inode *) bh->b_data) + ino;
+
+/* TODO 4/6: fill VFS inode */
+inode->i_mode = mi->mode;
+i_uid_write(inode, mi->uid);
+i_gid_write(inode, mi->gid);
+inode->i_size = mi->size;
+inode->i_blocks = 0;
+inode->i_mtime = inode->i_atime = inode->i_ctime = current_time(inode);
+
+/* TODO 4/2: Fill dir inode operations. */
+inode->i_op = &simple_dir_inode_operations;
+inode->i_fop = &simple_dir_operations;
+
+/* TODO 4/1: Directory inodes start off with i_nlink == 2.
+ * (use inc_link) */
+inc_nlink(inode);
+/* TODO 4/1: uncomment after the minfs_inode is initialized */
+mii->data_block = mi->data_block;
+
+/* Free resources. */
+/* TODO 4/1: uncomment after the buffer_head is initialized */
+brelse(bh);
+//brelse(bh);
+unlock_new_inode(inode);
+
+static const struct super_operations minfs_ops = {
+	.statfs		= simple_statfs,
+	.put_super	= minfs_put_super,
+	/* TODO 4/2: add alloc and destroy inode functions */
+	.alloc_inode	= minfs_alloc_inode,
+	.destroy_inode	= minfs_destroy_inode,
+	/* TODO 7/1:	= set write_inode function. */
+	.write_inode	= minfs_write_inode,
+};
+```
+
+#### 5.minfs挂载和卸载的测试
+
+> 验证文件系统是否已挂载
+
+![image-20250908154050862](https://leeway2zcblog-1373523181.cos.ap-guangzhou.myqcloud.com/img/image-20250908154050862.png)
+
+> 挂载成功
+
+
+
+
+
+
+
+
+
+
 
