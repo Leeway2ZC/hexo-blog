@@ -22,8 +22,8 @@ style: https://bubuzou.oss-cn-shenzhen.aliyuncs.com/blog/202010/bubuzou.css
 leancloud:
   appid: aD8jJBpu4oew3ovNY73z6Rdq-gzGzoHsz # 填写您的appid
   appkey: FdzS5SOPHdhYQoEUngQ8K2QW # 填写您的appkey
-  comment: true # 是否开启评论系统
-  timer: false # 是否开启文章统计
+  comment: false # 是否开启评论系统
+  timer: true # 是否开启文章统计
 
 # Analytics
 # google-analytics:
