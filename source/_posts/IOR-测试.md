@@ -375,3 +375,23 @@ cd /ior-offline
 tar -czvf ior-offline-package.tar.gz debs/ ior/
 ```
 
+6️⃣ 上传到离线服务器之后，在离线服务器上解压缩
+
+```bash
+tar -xzvf ior-offline-package.tar.gz
+cd debs/
+# 安装所有deb包
+apt install ./*.deb
+```
+
+7️⃣ 开始安装ior
+
+```bash
+cd ior/
+./bootstrap
+# 如果提示autoconf有问题，大概率是autoconf没有使用正确的版本
+# 执行 export PATH=/usr/bin:$PATH
+./configure
+make  # 安装完成
+```
+
