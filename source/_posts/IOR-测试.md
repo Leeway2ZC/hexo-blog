@@ -2,6 +2,7 @@
 title: IOR 测试
 date: 2025-10-11 14:42:36
 tags:
+abstract: 使用与安装IOR
 ---
 
 <h1><center>IOR 测试</center></h1>
@@ -312,4 +313,65 @@ mpirun --hostfile hostfile.txt ior -a MPIIO -b 1m -t 1m -i 3 -o /mnt/gluster/tes
 
 
 ## 三  离线环境下安装 IOR
+
+### 1 准备环境
+
+​	需要一台与离线服务器架构和系统版本系统的机器，以现在这台离线服务器为例，它是ubuntu 22.04的系统版本，然后架构为aarch64即arm架构的，因此构建一个相同环境的机器。由于大部分系统不是arm架构的，所以可以采用在虚拟机上使用docker+qemu模拟的方案构建一个相同环境的机器。
+
+使用 Docker 的 ARM64 模拟环境（基于 QEMU）：
+
+1️⃣ 启用多架构支持，在有网络的 Ubuntu 或其他 Linux 系统上执行：
+
+```
+sudo apt update
+sudo apt install qemu-user-static
+sudo docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+```
+
+2️⃣ 运行 ARM64 的 Ubuntu 22.04 容器
+
+```bash
+sudo docker run -it --platform linux/arm64 ubuntu:22.04
+```
+
+### 2 准备deb包
+
+​	现在就在一个 ARM64 Ubuntu 22.04 环境里了，然后就可以开始下载软件所必须的依赖包了，对于 IOR 而言，是以下这5个：build-essential automake libopenmpi-dev openmpi-bin libaio-dev
+
+​	单独下载安装这5个包可能会出现依赖问题，也就是依赖的依赖没有满足，使用 `apt-rdepends` 可以解决这个问题，使用 apt-rdepends 可以生成完整依赖树
+
+1️⃣ 安装 apt-rdepends
+
+```bash
+apt install -y apt-rdepends
+```
+
+2️⃣ 生成依赖列表，这会输出一个去重的包列表文件 all_deps.list，包含所有递归依赖
+
+```bash
+apt-rdepends build-essential autoconf automake libtool git libaio-dev libopenmpi-dev openmpi-bin libhdf5-openmpi-dev | grep -v "^ " | sort -u > all_deps.list
+```
+
+3️⃣ 下载所有 deb 包
+
+```bash
+mkdir -p /ior-offline/debs
+cd /ior-offline/debs
+xargs -a ../all_deps.list apt download
+```
+
+> 这会下载所有包的 .deb 文件到当前目录（匹配 aarch64 架构）。如果有错误（如某些包不存在），检查列表并移除可选包
+
+4️⃣ 下载 IOR 源码
+
+```bash
+git clone https://github.com/hpc/ior.git
+```
+
+5️⃣ 打包所有文件，将 deb 目录和源代码打包成一个压缩包
+
+```bash
+cd /ior-offline
+tar -czvf ior-offline-package.tar.gz debs/ ior/
+```
 
